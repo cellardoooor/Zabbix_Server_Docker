@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: zabbix-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: zabbix
+      POSTGRES_PASSWORD: zabbix
+      POSTGRES_DB: zabbix
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - zabbix-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zabbix"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zabbix-server:
+    build: .
+    container_name: zabbix-server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: zabbix
+      DB_USER: zabbix
+      DB_PASSWORD: zabbix
+      ZBX_LOGTYPE: console
+      ZBX_DEBUGLEVEL: 3
+    ports:
+      - "10051:10051"
+    volumes:
+      - zabbix_data:/var/lib/zabbix
+      - ./alertscripts:/usr/lib/zabbix/alertscripts:ro
+      - ./externalscripts:/usr/lib/zabbix/externalscripts:ro
+      - ./snmptraps:/var/lib/zabbix/snmptraps:rw
+    networks:
+      - zabbix-network
+
+  zabbix-web:
+    image: zabbix/zabbix-web-nginx-pgsql:alpine-6.0-latest
+    container_name: zabbix-web
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - zabbix-server
+    environment:
+      ZBX_SERVER_HOST: zabbix-server
+      DB_SERVER_HOST: postgres
+      POSTGRES_USER: zabbix
+      POSTGRES_PASSWORD: zabbix
+      POSTGRES_DB: zabbix
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+    volumes:
+      - ./web:/etc/zabbix/web:ro
+    networks:
+      - zabbix-network
+
+networks:
+  zabbix-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  zabbix_data:
