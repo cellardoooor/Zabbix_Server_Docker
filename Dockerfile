@@ -57,7 +57,10 @@ RUN cd zabbix-${ZABBIX_VERSION} && \
 
 RUN cd zabbix-${ZABBIX_VERSION} && \
     make -j$(nproc) && \
-    make install
+    make install && \
+    # Очистка после установки для уменьшения размера образа
+    cd / && \
+    rm -rf /build/*
 
 # Создаем пользователя и директории
 RUN groupadd -r zabbix && \
